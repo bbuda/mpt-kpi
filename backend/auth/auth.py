@@ -6,8 +6,11 @@ import jwt
 import datetime
 import secrets
 
+from werkzeug.security import generate_password_hash
+from services.email_generator import send_reset_email
+
 from backend.core.extensions import db, mail
-from backend.models.user import User
+from backend.models.user import User, PasswordResetToken
 
 auth_bp = Blueprint("auth", __name__)
 SECRET_KEY = secrets.token_hex(32)  #Генерация ключа, мб поместить в другое место
@@ -63,3 +66,39 @@ def complete_reset(token):
     user.set_password(data["password"])
     db.session.commit()
     return jsonify({"message": "Password reset successful"}), 200
+
+
+@auth_bp.route("/register", methods=["POST"])
+def register():
+    data = request.json
+
+    if not all(key in data for key in ("first_name", "last_name", "phone_number", "email", "password")):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    existing_user = User.query.filter_by(email=data["email"]).first()
+    if existing_user:
+        return jsonify({"error": "User already exists"}), 400
+
+    new_user = User(
+        first_name=data["first_name"],
+        last_name=data["last_name"],
+        phone_number=data["phone_number"],
+        email=data["email"],
+        password_hash=generate_password_hash(data["password"]),
+        role_id=2  # Обычный пользователь
+    )
+    db.session.add(new_user)
+    db.session.commit()
+
+
+    token = secrets.token_urlsafe(32)
+    reset_token = PasswordResetToken(user_id=new_user.id, token=token)
+    db.session.add(reset_token)
+    db.session.commit()
+
+
+    reset_url = f"https://website.ru/reset-password?token={token}"
+
+    send_reset_email(new_user.email, reset_url)
+
+    return jsonify({"message": "User registered. Check your email for password reset link."}), 201
