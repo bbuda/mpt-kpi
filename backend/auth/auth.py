@@ -3,7 +3,8 @@ from flask import Blueprint, jsonify, request, url_for
 from flask_login import login_user, logout_user
 from flask_mail import Message
 import jwt
-import datetime
+from datetime import datetime
+from backend.models.user import Token
 import secrets
 
 from werkzeug.security import generate_password_hash
@@ -66,6 +67,36 @@ def complete_reset(token):
     user.set_password(data["password"])
     db.session.commit()
     return jsonify({"message": "Password reset successful"}), 200
+
+@auth_bp.route("/change_password", methods=["POST"])
+def change_password():
+    data = request.json
+    token_str = data.get("token")
+    new_password = data.get("new_password")
+
+    if not token_str or not new_password:
+        return jsonify({"error": "Missing token or new password"}), 400
+
+    token = Token.query.filter_by(token=token_str).first()
+    if not token:
+        return jsonify({"error": "Invalid token"}), 400
+
+    if token.expires_at < datetime.utcnow():
+        db.session.delete(token)
+        db.session.commit()
+        return jsonify({"error": "Token has expired"}), 400
+
+    user = User.query.get(token.user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    user.set_password(new_password)
+    db.session.delete(token)
+    db.session.commit()
+
+    return jsonify({"message": "Password changed successfully"}), 200
+
+
 
 
 @auth_bp.route("/register", methods=["POST"])

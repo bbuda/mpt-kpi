@@ -28,6 +28,16 @@ class Role(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), nullable=False, unique=True)
 
+class Token(db.Model):
+    __tablename__ = 'Tokens'
+
+    token = db.Column(db.String(255), primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+
+    user = db.relationship('User', backref=db.backref('reset_tokens', lazy=True))
+
+
 
 class PasswordResetToken(db.Model):
     id = db.Column(db.Integer, primary_key=True)
